@@ -40,7 +40,7 @@ const BookingFlow: React.FC = () => {
   const [bookingError, setBookingError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // ✅ Get selected provider from localStorage
+  // Get selected provider from localStorage
   useEffect(() => {
     const savedProvider = localStorage.getItem('selectedProvider');
     if (savedProvider) {
@@ -76,7 +76,7 @@ const BookingFlow: React.FC = () => {
 
   const calendarDays = generateCalendar();
 
-  // ✅ Calculate price based on selected provider
+  // Calculate price based on selected provider
   const calculatePrice = () => {
     const basePrice = selectedProvider?.price || 800;
     const travelFee = 200;
@@ -95,31 +95,54 @@ const BookingFlow: React.FC = () => {
     if (promoCode.trim()) setPromoApplied(true);
   };
 
-  // ✅ SAVE BOOKING TO DATABASE
+  // ✅ SAVE BOOKING TO DATABASE (FIXED UUID ERROR)
   const saveBookingToDatabase = async () => {
     setIsSaving(true);
     setBookingError('');
 
     try {
-      // Get current user from localStorage
       const storedUser = localStorage.getItem('khidmat_user');
       const currentUser = storedUser ? JSON.parse(storedUser) : user;
 
       if (!currentUser || !currentUser.id) {
         setBookingError('Please login to continue');
         setIsSaving(false);
-        return;
+        return false;
+      }
+
+      // Get provider ID properly
+      let providerId = selectedProvider?.id;
+      
+      if (providerId && typeof providerId === 'number') {
+        providerId = providerId.toString();
+      }
+      
+      if (!providerId || providerId === '1') {
+        const { data: providerData, error: providerError } = await supabase
+          .from('providers')
+          .select('id')
+          .eq('name', selectedProvider?.name)
+          .eq('city', selectedProvider?.city)
+          .single();
+        
+        if (providerData && !providerError) {
+          providerId = providerData.id;
+        } else {
+          setBookingError('Invalid provider. Please try again.');
+          setIsSaving(false);
+          return false;
+        }
       }
 
       const bookingId = 'KH-' + Date.now();
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_id: bookingId,
             customer_id: currentUser.id,
-            provider_id: selectedProvider?.id || '1',
+            provider_id: providerId,
             service: selectedProvider?.category || 'Service',
             booking_date: `2026-06-${selectedDate}`,
             booking_time: selectedTime,
@@ -129,8 +152,7 @@ const BookingFlow: React.FC = () => {
             customer_phone: profile?.phone || currentUser?.phone || 'Not provided',
             created_at: new Date().toISOString(),
           }
-        ])
-        .select();
+        ]);
 
       if (error) {
         console.error('Supabase error:', error);
@@ -139,6 +161,7 @@ const BookingFlow: React.FC = () => {
         return false;
       }
 
+      setIsSaving(false);
       return true;
     } catch (err) {
       console.error('Booking error:', err);
@@ -154,7 +177,6 @@ const BookingFlow: React.FC = () => {
     } else if (currentStep === 2 && selectedDate && selectedTime) {
       setCurrentStep(3);
     } else if (currentStep === 3) {
-      // ✅ Save booking to database
       const success = await saveBookingToDatabase();
       if (success) {
         setCurrentStep(4);
@@ -169,7 +191,6 @@ const BookingFlow: React.FC = () => {
     exit: { opacity: 0, y: -20, transition: { duration: 0.3 } },
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -181,7 +202,6 @@ const BookingFlow: React.FC = () => {
     );
   }
 
-  // No provider selected
   if (!selectedProvider) {
     return (
       <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
@@ -326,10 +346,9 @@ const BookingFlow: React.FC = () => {
     </motion.div>
   );
 
-  // Step 3: Order Summary
+  // Step 3: Order Summary (Keep your existing Step3 code)
   const Step3 = () => (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
-      {/* Progress Indicator */}
       <div className="flex items-center justify-center gap-2 mb-8">
         {[
           { label: 'Details', completed: true },
@@ -349,7 +368,6 @@ const BookingFlow: React.FC = () => {
 
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Order Summary</h2>
 
-      {/* Provider Card */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4 shadow-sm">
         <div className="flex gap-4">
           <img 
@@ -368,7 +386,6 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* Date & Time */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4 shadow-sm">
         <div className="flex items-center gap-3 text-gray-600 mb-2">
           <Calendar size={18} className="text-emerald-600" />
@@ -380,7 +397,6 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* Price Breakdown */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-4 shadow-sm">
         <h3 className="font-bold text-gray-800 dark:text-white mb-4">Price Breakdown</h3>
         <div className="space-y-3 mb-4 pb-4 border-b border-gray-100">
@@ -395,7 +411,6 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* Promo Code */}
       <div className="flex gap-2 mb-4">
         <input
           type="text"
@@ -414,7 +429,6 @@ const BookingFlow: React.FC = () => {
         </button>
       </div>
 
-      {/* Payment Methods */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
         <h3 className="font-bold text-gray-800 dark:text-white mb-4">Payment Method</h3>
         <div className="space-y-3">
@@ -434,7 +448,6 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* Error Message */}
       {bookingError && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">
           {bookingError}
