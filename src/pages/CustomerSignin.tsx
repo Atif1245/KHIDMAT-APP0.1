@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Chrome, Apple } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { supabase } from '../lib/supabase';
 
 export default function CustomerSignin() {
   const navigate = useNavigate();
@@ -13,40 +14,113 @@ export default function CustomerSignin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ✅ LOGIN WITH SUPABASE DATABASE
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Check if user exists in Supabase
+      const { data, error: supabaseError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .single();
 
-      if (email && password) {
-        setUser({
-          name: 'Ahmed',
-          email,
-          role: 'customer',
-        });
-        navigate('/customer-home');
-      } else {
-        setError('Please fill in all fields');
+      if (supabaseError || !data) {
+        setError('Invalid email or password');
+        setLoading(false);
+        return;
       }
+
+      // Save user to context and localStorage
+      const userData = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        city: data.city,
+        role: data.role || 'customer',
+      };
+      
+      setUser(userData);
+      localStorage.setItem('khidmat_user', JSON.stringify(userData));
+      
+      // Redirect based on role
+      if (data.role === 'provider') {
+        navigate('/provider-dashboard');
+      } else {
+        navigate('/customer-home');
+      }
+      
     } catch (err) {
+      console.error('Login error:', err);
       setError('Sign in failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    // Simulate social login
-    setUser({
-      name: `User`,
-      email: `user@${provider.toLowerCase()}.com`,
-      role: 'customer',
-    });
-    navigate('/customer-home');
+  // ✅ SOCIAL LOGIN WITH SUPABASE
+  const handleSocialLogin = async (provider: string) => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const mockEmail = `user@${provider.toLowerCase()}.com`;
+      const mockPassword = 'social_login';
+      
+      // Check if user exists
+      let { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', mockEmail)
+        .single();
+      
+      // If not exists, create new user
+      if (!existingUser) {
+        const { data: newUser, error: insertError } = await supabase
+          .from('users')
+          .insert([
+            {
+              name: `${provider} User`,
+              email: mockEmail,
+              password: mockPassword,
+              role: 'customer',
+              city: 'Lahore',
+              phone: '03000000000'
+            }
+          ])
+          .select()
+          .single();
+        
+        if (insertError) {
+          setError('Social login failed');
+          setLoading(false);
+          return;
+        }
+        existingUser = newUser;
+      }
+      
+      const userData = {
+        id: existingUser.id,
+        name: existingUser.name,
+        email: existingUser.email,
+        role: existingUser.role || 'customer',
+      };
+      
+      setUser(userData);
+      localStorage.setItem('khidmat_user', JSON.stringify(userData));
+      navigate('/customer-home');
+      
+    } catch (err) {
+      setError('Social login failed');
+      console.error('Social login error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const containerVariants = {

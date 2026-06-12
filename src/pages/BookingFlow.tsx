@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin,
@@ -8,8 +8,11 @@ import {
   Calendar,
   ArrowRight,
   Copy,
+  AlertCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useApp } from '../contexts/AppContext';
 
 interface TimeSlot {
   time: string;
@@ -24,6 +27,9 @@ interface CalendarDay {
 
 const BookingFlow: React.FC = () => {
   const navigate = useNavigate();
+  const { profile, user } = useApp();
+  const [selectedProvider, setSelectedProvider] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
@@ -31,6 +37,18 @@ const BookingFlow: React.FC = () => {
   const [selectedPayment, setSelectedPayment] = useState('jazzcash');
   const [promoCode, setPromoCode] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // ✅ Get selected provider from localStorage
+  useEffect(() => {
+    const savedProvider = localStorage.getItem('selectedProvider');
+    if (savedProvider) {
+      setSelectedProvider(JSON.parse(savedProvider));
+      localStorage.removeItem('selectedProvider');
+    }
+    setLoading(false);
+  }, []);
 
   const timeSlots: TimeSlot[] = [
     { time: '9:00 AM', available: true },
@@ -58,11 +76,18 @@ const BookingFlow: React.FC = () => {
 
   const calendarDays = generateCalendar();
 
-  const servicePrice = 1600;
-  const travelPrice = 200;
-  const platformFee = 100;
-  const taxPrice = 190;
-  const subtotal = servicePrice + travelPrice + platformFee + taxPrice;
+  // ✅ Calculate price based on selected provider
+  const calculatePrice = () => {
+    const basePrice = selectedProvider?.price || 800;
+    const travelFee = 200;
+    const platformFee = 100;
+    const tax = Math.round((basePrice + travelFee + platformFee) * 0.1);
+    const total = basePrice + travelFee + platformFee + tax;
+    return { base: basePrice, travel: travelFee, platform: platformFee, tax: tax, total: total };
+  };
+
+  const price = calculatePrice();
+  const subtotal = price.base + price.travel + price.platform + price.tax;
   const discount = promoApplied ? 200 : 0;
   const totalPrice = subtotal - discount;
 
@@ -70,10 +95,72 @@ const BookingFlow: React.FC = () => {
     if (promoCode.trim()) setPromoApplied(true);
   };
 
-  const handleContinue = () => {
-    if (currentStep === 1) setCurrentStep(2);
-    else if (currentStep === 2 && selectedDate && selectedTime) setCurrentStep(3);
-    else if (currentStep === 3) setCurrentStep(4);
+  // ✅ SAVE BOOKING TO DATABASE
+  const saveBookingToDatabase = async () => {
+    setIsSaving(true);
+    setBookingError('');
+
+    try {
+      // Get current user from localStorage
+      const storedUser = localStorage.getItem('khidmat_user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : user;
+
+      if (!currentUser || !currentUser.id) {
+        setBookingError('Please login to continue');
+        setIsSaving(false);
+        return;
+      }
+
+      const bookingId = 'KH-' + Date.now();
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert([
+          {
+            booking_id: bookingId,
+            customer_id: currentUser.id,
+            provider_id: selectedProvider?.id || '1',
+            service: selectedProvider?.category || 'Service',
+            booking_date: `2026-06-${selectedDate}`,
+            booking_time: selectedTime,
+            amount: totalPrice,
+            status: 'confirmed',
+            customer_address: profile?.address || 'Not provided',
+            customer_phone: profile?.phone || currentUser?.phone || 'Not provided',
+            created_at: new Date().toISOString(),
+          }
+        ])
+        .select();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        setBookingError(error.message || 'Failed to save booking');
+        setIsSaving(false);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Booking error:', err);
+      setBookingError('Something went wrong. Please try again.');
+      setIsSaving(false);
+      return false;
+    }
+  };
+
+  const handleContinue = async () => {
+    if (currentStep === 1) {
+      setCurrentStep(2);
+    } else if (currentStep === 2 && selectedDate && selectedTime) {
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
+      // ✅ Save booking to database
+      const success = await saveBookingToDatabase();
+      if (success) {
+        setCurrentStep(4);
+      }
+      setIsSaving(false);
+    }
   };
 
   const containerVariants = {
@@ -82,377 +169,309 @@ const BookingFlow: React.FC = () => {
     exit: { opacity: 0, y: -20, transition: { duration: 0.3 } },
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No provider selected
+  if (!selectedProvider) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
+        <div className="bg-white rounded-2xl p-8 text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">No Provider Selected</h2>
+          <p className="text-gray-500 mb-6">Please select a service provider first.</p>
+          <button 
+            onClick={() => navigate('/customer-home')}
+            className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold"
+          >
+            Browse Services
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Step 1: Provider Details
   const Step1 = () => (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-surface dark:bg-surface-dark">
-      {/* Hero */}
-      <div className="relative h-56 overflow-hidden bg-gradient-to-br from-primary-dark to-primary">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-surface/80 dark:to-surface-dark/80" />
-        <motion.div
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.8, type: 'spring' }}
-          className="absolute inset-0 flex items-center justify-center"
-        >
-          <div className="relative w-28 h-28 bg-gradient-to-br from-primary-light to-info rounded-full flex items-center justify-center text-white shadow-xl">
-            <Wrench size={56} />
-          </div>
-        </motion.div>
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="relative h-56 overflow-hidden bg-gradient-to-br from-emerald-800 to-emerald-600">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-gray-50/80 dark:to-gray-900/80" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <img 
+            src={selectedProvider.avatar || `https://ui-avatars.com/api/?name=${selectedProvider.name.replace(' ', '+')}&background=005F54&color=fff&size=100`}
+            alt={selectedProvider.name}
+            className="w-28 h-28 rounded-full border-4 border-white object-cover shadow-xl"
+          />
+        </div>
       </div>
 
       <div className="px-4 pt-8 pb-24 max-w-md mx-auto">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-navy dark:text-white mb-2">Ahmed Raza</h1>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">{selectedProvider.name}</h1>
           <div className="flex items-center justify-center gap-2 mb-3">
-            <Star size={18} className="fill-yellow-400 text-yellow-400" />
-            <span className="text-yellow-600 dark:text-yellow-400 font-semibold">4.9 (428 reviews)</span>
+            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+            <span className="font-semibold">{selectedProvider.rating} ({selectedProvider.reviews} reviews)</span>
           </div>
-          <p className="text-primary dark:text-primary-bright text-lg font-semibold">Plumber</p>
-        </motion.div>
+          <p className="text-emerald-600 font-semibold">{selectedProvider.category}</p>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-8 shadow-sm">
-          <h3 className="text-navy dark:text-white font-bold mb-4">Services</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
+          <h3 className="font-bold text-gray-800 dark:text-white mb-4">Services</h3>
           <div className="space-y-3">
-            {[
-              { name: 'Pipe Repair', price: 'Rs 800' },
-              { name: 'Leak Fix', price: 'Rs 600' },
-              { name: 'Installation', price: 'Rs 1,200' },
-              { name: 'Consultation', price: 'Rs 300' },
-            ].map((service, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ x: -10, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.4 + idx * 0.1 }}
-                className="flex justify-between items-center text-navy/70 dark:text-gray-400 pb-3 border-b border-gray-100 dark:border-surface-light last:border-0"
-              >
-                <span className="text-sm">{service.name}</span>
-                <span className="text-primary dark:text-primary-bright font-semibold">{service.price}</span>
-              </motion.div>
-            ))}
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+              <span>{selectedProvider.category} Service</span>
+              <span className="font-semibold text-emerald-600">Rs {selectedProvider.price}/hour</span>
+            </div>
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+              <span>Travel Fee</span>
+              <span className="font-semibold text-emerald-600">Rs 200</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Platform Fee</span>
+              <span className="font-semibold text-emerald-600">Rs 100</span>
+            </div>
           </div>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Sticky Bottom */}
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.5, type: 'spring' }}
-        className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-card/90 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-100 dark:border-surface-light"
-      >
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-200 dark:border-gray-700">
         <div className="text-center mb-3">
-          <span className="text-navy dark:text-white text-2xl font-bold">Rs 800<span className="text-gray-400 text-lg">/hour</span></span>
+          <span className="text-2xl font-bold text-gray-800 dark:text-white">Rs {selectedProvider.price}<span className="text-gray-400 text-lg">/hour</span></span>
         </div>
         <button
           onClick={handleContinue}
-          className="w-full bg-gradient-to-r from-primary to-info hover:from-primary-dark hover:to-info text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
         >
           Book Now <ArrowRight size={20} />
         </button>
-      </motion.div>
+      </div>
     </motion.div>
   );
 
   // Step 2: Select Date & Time
   const Step2 = () => (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-surface dark:bg-surface-dark px-4 pt-8 pb-24 max-w-md mx-auto">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="text-2xl font-bold text-navy dark:text-white mb-6">Select Date & Time</h2>
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Select Date & Time</h2>
 
-        <div className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-8 shadow-sm">
-          <h3 className="text-navy dark:text-white font-bold mb-4">June 2026</h3>
-          <div className="grid grid-cols-7 gap-2 mb-3">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div key={day} className="text-center text-gray-400 text-xs font-semibold py-1">{day}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-2">
-            {calendarDays.map((day, idx) => (
-              <motion.button
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
+        <h3 className="font-bold text-gray-800 dark:text-white mb-4">June 2026</h3>
+        <div className="grid grid-cols-7 gap-2 mb-3">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+            <div key={day} className="text-center text-gray-400 text-xs font-semibold py-1">{day}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {calendarDays.map((day, idx) => (
+            <button
+              key={idx}
+              onClick={() => day.available && day.isCurrentMonth && setSelectedDate(day.date)}
+              disabled={!day.available || !day.isCurrentMonth}
+              className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                !day.isCurrentMonth ? 'bg-transparent text-gray-300'
+                  : !day.available ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : selectedDate === day.date ? 'bg-emerald-600 text-white shadow-md'
+                      : 'bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-100'
+              }`}
+            >
+              {day.isCurrentMonth ? day.date : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selectedDate && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
+          <h3 className="font-bold text-gray-800 dark:text-white mb-4">Available Times - June {selectedDate}</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {timeSlots.map((slot, idx) => (
+              <button
                 key={idx}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => day.available && day.isCurrentMonth && setSelectedDate(day.date)}
-                disabled={!day.available || !day.isCurrentMonth}
-                className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  !day.isCurrentMonth ? 'bg-transparent text-gray-300 dark:text-gray-600'
-                    : !day.available ? 'bg-gray-100 dark:bg-surface-light text-gray-400 cursor-not-allowed'
-                      : selectedDate === day.date ? 'bg-gradient-to-br from-primary to-info text-white shadow-md'
-                        : 'bg-gray-50 dark:bg-surface-light text-navy dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-surface-card'
+                onClick={() => slot.available && setSelectedTime(slot.time)}
+                disabled={!slot.available}
+                className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                  !slot.available ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : selectedTime === slot.time ? 'bg-emerald-600 text-white shadow-md'
+                      : 'bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-100'
                 }`}
               >
-                {day.isCurrentMonth ? day.date : ''}
-              </motion.button>
+                {slot.time}
+              </button>
             ))}
           </div>
         </div>
+      )}
 
-        {selectedDate && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-8 shadow-sm">
-            <h3 className="text-navy dark:text-white font-bold mb-4">Available Times - June {selectedDate}</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {timeSlots.map((slot, idx) => (
-                <motion.button
-                  key={idx}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => slot.available && setSelectedTime(slot.time)}
-                  disabled={!slot.available}
-                  className={`py-3 rounded-xl text-sm font-semibold transition-all ${
-                    !slot.available ? 'bg-gray-100 dark:bg-surface-light text-gray-400 cursor-not-allowed'
-                      : selectedTime === slot.time ? 'bg-gradient-to-br from-primary to-info text-white shadow-md'
-                        : 'bg-gray-50 dark:bg-surface-light text-navy dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-surface-card'
-                  }`}
-                >
-                  {slot.time}
-                </motion.button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </motion.div>
-
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-card/90 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-100 dark:border-surface-light"
-      >
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-200 dark:border-gray-700">
         <button
           onClick={handleContinue}
           disabled={!selectedDate || !selectedTime}
-          className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${
+          className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
             selectedDate && selectedTime
-              ? 'bg-gradient-to-r from-primary to-info hover:from-primary-dark hover:to-info text-white'
-              : 'bg-gray-200 dark:bg-surface-light text-gray-400 cursor-not-allowed'
+              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
           }`}
         >
           Continue <ArrowRight size={20} />
         </button>
-      </motion.div>
+      </div>
     </motion.div>
   );
 
   // Step 3: Order Summary
   const Step3 = () => (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-surface dark:bg-surface-dark px-4 pt-8 pb-24 max-w-md mx-auto">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        {/* Progress Indicator */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {[
-            { label: 'Details', completed: true },
-            { label: 'Payment', completed: true },
-            { label: 'Confirm', completed: false },
-          ].map((step, idx) => (
-            <React.Fragment key={idx}>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.3 + idx * 0.1 }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
-                  step.completed ? 'bg-gradient-to-br from-primary to-info text-white'
-                    : 'bg-gray-200 dark:bg-surface-light text-gray-400'
-                }`}
-              >
-                {step.completed ? <Check size={18} /> : idx + 1}
-              </motion.div>
-              {idx < 2 && (
-                <div className={`h-0.5 w-8 ${idx < 1 ? 'bg-gradient-to-r from-primary to-info' : 'bg-gray-200 dark:bg-surface-light'}`} />
-              )}
-            </React.Fragment>
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
+      {/* Progress Indicator */}
+      <div className="flex items-center justify-center gap-2 mb-8">
+        {[
+          { label: 'Details', completed: true },
+          { label: 'Payment', completed: true },
+          { label: 'Confirm', completed: false },
+        ].map((step, idx) => (
+          <React.Fragment key={idx}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+              step.completed ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+            }`}>
+              {step.completed ? <Check size={18} /> : idx + 1}
+            </div>
+            {idx < 2 && <div className={`h-0.5 w-8 ${idx < 1 ? 'bg-emerald-600' : 'bg-gray-200 dark:bg-gray-700'}`} />}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Order Summary</h2>
+
+      {/* Provider Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4 shadow-sm">
+        <div className="flex gap-4">
+          <img 
+            src={selectedProvider.avatar || `https://ui-avatars.com/api/?name=${selectedProvider.name.replace(' ', '+')}&background=005F54&color=fff`}
+            alt={selectedProvider.name}
+            className="w-14 h-14 rounded-full object-cover"
+          />
+          <div>
+            <h3 className="font-bold text-gray-800 dark:text-white">{selectedProvider.name}</h3>
+            <div className="flex items-center gap-1">
+              <Star size={14} className="fill-yellow-400" />
+              <span>{selectedProvider.rating} ({selectedProvider.reviews})</span>
+            </div>
+            <p className="text-xs text-gray-500">{selectedProvider.category}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Date & Time */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4 shadow-sm">
+        <div className="flex items-center gap-3 text-gray-600 mb-2">
+          <Calendar size={18} className="text-emerald-600" />
+          <span>June {selectedDate}, 2026 at {selectedTime}</span>
+        </div>
+        <div className="flex items-center gap-3 text-gray-600">
+          <MapPin size={18} className="text-emerald-600" />
+          <span>{profile?.city || 'Lahore'}, Pakistan</span>
+        </div>
+      </div>
+
+      {/* Price Breakdown */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-4 shadow-sm">
+        <h3 className="font-bold text-gray-800 dark:text-white mb-4">Price Breakdown</h3>
+        <div className="space-y-3 mb-4 pb-4 border-b border-gray-100">
+          <div className="flex justify-between"><span>Service (2 hrs)</span><span>Rs {price.base}</span></div>
+          <div className="flex justify-between"><span>Travel</span><span>Rs {price.travel}</span></div>
+          <div className="flex justify-between"><span>Platform Fee</span><span>Rs {price.platform}</span></div>
+          <div className="flex justify-between"><span>Tax</span><span>Rs {price.tax}</span></div>
+        </div>
+        {promoApplied && <div className="flex justify-between text-green-600 mb-3"><span>Discount</span><span>-Rs {discount}</span></div>}
+        <div className="flex justify-between font-bold text-lg">
+          <span>Total</span><span className="text-emerald-600">Rs {totalPrice}</span>
+        </div>
+      </div>
+
+      {/* Promo Code */}
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Promo code"
+          value={promoCode}
+          onChange={(e) => setPromoCode(e.target.value)}
+          disabled={promoApplied}
+          className="flex-1 bg-white dark:bg-gray-800 rounded-xl px-4 py-3 border border-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+        />
+        <button
+          onClick={handleApplyPromo}
+          disabled={promoApplied}
+          className="px-4 py-3 bg-emerald-600 text-white rounded-xl font-semibold disabled:opacity-50"
+        >
+          {promoApplied ? 'Applied' : 'Apply'}
+        </button>
+      </div>
+
+      {/* Payment Methods */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
+        <h3 className="font-bold text-gray-800 dark:text-white mb-4">Payment Method</h3>
+        <div className="space-y-3">
+          {['jazzcash', 'easypaisa', 'credit', 'cash'].map((method) => (
+            <label key={method} className="flex items-center gap-3 cursor-pointer p-3 rounded-xl hover:bg-gray-50">
+              <input
+                type="radio"
+                name="payment"
+                value={method}
+                checked={selectedPayment === method}
+                onChange={(e) => setSelectedPayment(e.target.value)}
+                className="w-4 h-4 accent-emerald-600"
+              />
+              <span className="capitalize font-semibold text-gray-700">{method}</span>
+            </label>
           ))}
         </div>
+      </div>
 
-        <h2 className="text-2xl font-bold text-navy dark:text-white mb-6">Order Summary</h2>
+      {/* Error Message */}
+      {bookingError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">
+          {bookingError}
+        </div>
+      )}
 
-        {/* Provider Card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white dark:bg-surface-card rounded-2xl p-4 mb-4 shadow-sm">
-          <div className="flex gap-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-primary to-info rounded-full flex items-center justify-center text-white flex-shrink-0">
-              <Wrench size={28} />
-            </div>
-            <div>
-              <h3 className="font-bold text-navy dark:text-white">Ahmed Raza</h3>
-              <div className="flex items-center gap-1 text-yellow-500 text-sm">
-                <Star size={14} className="fill-yellow-400" />
-                <span>4.9 (428)</span>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Date & Time & Location */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="bg-white dark:bg-surface-card rounded-2xl p-4 mb-4 shadow-sm">
-          <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 mb-3 text-sm">
-            <Calendar size={18} className="text-primary dark:text-primary-bright" />
-            <span>June {selectedDate}, 2026 at {selectedTime}</span>
-          </div>
-          <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 text-sm">
-            <MapPin size={18} className="text-primary dark:text-primary-bright" />
-            <span>Lahore, Pakistan</span>
-          </div>
-        </motion.div>
-
-        {/* Price Breakdown */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-4 shadow-sm">
-          <h3 className="font-bold text-navy dark:text-white mb-4">Price Breakdown</h3>
-          <div className="space-y-3 mb-4 pb-4 border-b border-gray-100 dark:border-surface-light">
-            <div className="flex justify-between text-gray-600 dark:text-gray-400 text-sm"><span>Service (2 hrs)</span><span>Rs {servicePrice.toLocaleString()}</span></div>
-            <div className="flex justify-between text-gray-600 dark:text-gray-400 text-sm"><span>Travel</span><span>Rs {travelPrice.toLocaleString()}</span></div>
-            <div className="flex justify-between text-gray-600 dark:text-gray-400 text-sm"><span>Platform Fee</span><span>Rs {platformFee.toLocaleString()}</span></div>
-            <div className="flex justify-between text-gray-600 dark:text-gray-400 text-sm"><span>Tax</span><span>Rs {taxPrice.toLocaleString()}</span></div>
-          </div>
-          {promoApplied && (
-            <div className="flex justify-between text-success text-sm mb-3"><span>Discount</span><span>-Rs {discount.toLocaleString()}</span></div>
-          )}
-          <div className="flex justify-between text-navy dark:text-white font-bold text-lg">
-            <span>Total</span><span>Rs {totalPrice.toLocaleString()}</span>
-          </div>
-        </motion.div>
-
-        {/* Promo Code */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="flex gap-2 mb-4">
-          <input
-            type="text"
-            placeholder="Promo code"
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value)}
-            disabled={promoApplied}
-            className="flex-1 bg-white dark:bg-surface-card text-navy dark:text-white rounded-xl px-4 py-3 border border-gray-200 dark:border-surface-light placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
-          />
-          <button
-            onClick={handleApplyPromo}
-            disabled={promoApplied}
-            className="px-4 py-3 bg-primary dark:bg-primary-bright text-white rounded-xl font-semibold transition-all disabled:opacity-50 text-sm"
-          >
-            {promoApplied ? 'Applied' : 'Apply'}
-          </button>
-        </motion.div>
-
-        {/* Payment Methods */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-8 shadow-sm">
-          <h3 className="font-bold text-navy dark:text-white mb-4">Payment Method</h3>
-          <div className="space-y-3">
-            {[
-              { id: 'jazzcash', name: 'JazzCash' },
-              { id: 'easypaisa', name: 'Easypaisa' },
-              { id: 'credit', name: 'Credit Card' },
-              { id: 'cash', name: 'Cash' },
-              { id: 'afterwork', name: 'After Work' },
-            ].map((method) => (
-              <label key={method.id} className="flex items-center gap-3 cursor-pointer p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-surface-light transition-all">
-                <input
-                  type="radio"
-                  name="payment"
-                  value={method.id}
-                  checked={selectedPayment === method.id}
-                  onChange={(e) => setSelectedPayment(e.target.value)}
-                  className="w-4 h-4 accent-primary"
-                />
-                <span className="text-navy dark:text-gray-300 font-semibold flex-1 text-sm">{method.name}</span>
-              </label>
-            ))}
-          </div>
-        </motion.div>
-      </motion.div>
-
-      {/* Confirm Button */}
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-card/90 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-100 dark:border-surface-light"
-      >
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg px-4 py-5 max-w-md mx-auto border-t border-gray-200">
         <button
           onClick={handleContinue}
-          className="w-full bg-gradient-to-r from-primary to-info hover:from-primary-dark hover:to-info text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+          disabled={isSaving}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
         >
-          Confirm Booking <ArrowRight size={20} />
+          {isSaving ? 'Processing...' : 'Confirm Booking'} <ArrowRight size={20} />
         </button>
-      </motion.div>
+      </div>
     </motion.div>
   );
 
   // Step 4: Success
   const Step4 = () => (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      className="min-h-screen bg-surface dark:bg-surface-dark px-4 pt-8 pb-24 max-w-md mx-auto flex flex-col items-center justify-center relative overflow-hidden"
-    >
-      {/* Animated circles */}
-      {[...Array(6)].map((_, i) => (
-        <motion.div
-          key={i}
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: [0, 1, 0], opacity: [0, 0.2, 0] }}
-          transition={{ duration: 2, repeat: Infinity, delay: i * 0.3 }}
-          className="absolute w-20 h-20 rounded-full bg-primary"
-          style={{ left: `${15 + i * 15}%`, top: `${25 + (i % 2) * 25}%` }}
-        />
-      ))}
-
-      <motion.div
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.3, type: 'spring' }}
-        className="relative z-10 text-center"
-      >
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.4, type: 'spring' }}
-          className="w-24 h-24 bg-gradient-to-br from-primary to-info rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
-        >
-          <Check size={48} className="text-white" />
-        </motion.div>
-
-        <h1 className="text-3xl font-bold text-navy dark:text-white mb-6">Booking Confirmed!</h1>
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white dark:bg-surface-card rounded-2xl p-6 mb-6 w-full shadow-sm"
-        >
-          <div className="mb-4">
-            <p className="text-gray-400 text-sm mb-1">Order ID</p>
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-2xl font-bold text-primary dark:text-primary-bright">#KH-12345</span>
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="p-2 hover:bg-gray-100 dark:hover:bg-surface-light rounded-lg transition-all">
-                <Copy size={18} className="text-gray-400" />
-              </motion.button>
-            </div>
-          </div>
-          <div className="border-t border-gray-100 dark:border-surface-light pt-4">
-            <p className="text-gray-400 text-sm mb-1">ETA</p>
-            <p className="text-3xl font-bold text-navy dark:text-white">8 minutes</p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="space-y-3"
-        >
-          <button
-            onClick={() => navigate('/tracking')}
-            className="w-full bg-gradient-to-r from-primary to-info hover:from-primary-dark hover:to-info text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-          >
-            Track Order <ArrowRight size={20} />
-          </button>
-          <button
-            onClick={() => navigate('/customer-home')}
-            className="w-full border-2 border-primary dark:border-primary-bright text-primary dark:text-primary-bright hover:bg-primary hover:text-white dark:hover:bg-primary-bright dark:hover:text-surface-dark font-bold py-4 rounded-xl transition-all"
-          >
-            Back to Home
-          </button>
-        </motion.div>
-      </motion.div>
+    <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 py-8 flex flex-col items-center justify-center">
+      <div className="w-24 h-24 bg-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
+        <Check size={48} className="text-white" />
+      </div>
+      <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-6">Booking Confirmed!</h1>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-6 w-full max-w-md text-center shadow-sm">
+        <p className="text-gray-400 text-sm mb-1">Order ID</p>
+        <p className="text-2xl font-bold text-emerald-600">KH-{Date.now().toString().slice(-6)}</p>
+        <div className="border-t pt-4 mt-4">
+          <p className="text-gray-400 text-sm mb-1">ETA</p>
+          <p className="text-3xl font-bold text-gray-800 dark:text-white">15-20 minutes</p>
+        </div>
+      </div>
+      <div className="space-y-3 w-full max-w-md">
+        <button onClick={() => navigate('/customer-orders')} className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl">View Orders</button>
+        <button onClick={() => navigate('/customer-home')} className="w-full border-2 border-emerald-600 text-emerald-600 font-bold py-4 rounded-xl">Back to Home</button>
+      </div>
     </motion.div>
   );
 

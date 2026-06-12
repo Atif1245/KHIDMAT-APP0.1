@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { User, Phone, Mail, MapPin, Lock, Check, ArrowLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { pakistanCities } from '../data/services';
+import { supabase } from '../lib/supabase';
 
 type PasswordStrength = 'weak' | 'medium' | 'strong';
 
@@ -117,6 +118,18 @@ export default function CustomerSignup() {
     }
   };
 
+  // ✅ CHECK IF USER ALREADY EXISTS
+  const checkUserExists = async (email: string) => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email)
+      .single();
+    
+    return !error && data;
+  };
+
+  // ✅ SAVE USER TO SUPABASE
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -128,16 +141,56 @@ export default function CustomerSignup() {
     setLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Check if user already exists
+      const userExists = await checkUserExists(formData.email);
+      if (userExists) {
+        setError('User with this email already exists. Please sign in instead.');
+        setLoading(false);
+        return;
+      }
 
-      setUser({
-        name: formData.fullName,
-        email: formData.email,
-        role: 'customer',
-      });
+      // ✅ Insert new user into Supabase
+      const { data, error: supabaseError } = await supabase
+        .from('users')
+        .insert([
+          {
+            name: formData.fullName,
+            email: formData.email,
+            phone: formData.phoneNumber,
+            city: formData.city,
+            password: formData.password, // Note: In production, hash this password!
+            role: 'customer',
+            created_at: new Date().toISOString(),
+          }
+        ])
+        .select()
+        .single();
+
+      if (supabaseError) {
+        console.error('Supabase error:', supabaseError);
+        setError(supabaseError.message || 'Sign up failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Save user to context and localStorage
+      const userData = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        city: data.city,
+        role: data.role || 'customer',
+      };
+      
+      setUser(userData);
+      localStorage.setItem('khidmat_user', JSON.stringify(userData));
+      
+      // ✅ Redirect to home
       navigate('/customer-home');
+      
     } catch (err) {
+      console.error('Signup error:', err);
       setError('Sign up failed. Please try again.');
     } finally {
       setLoading(false);
