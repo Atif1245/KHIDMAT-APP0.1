@@ -346,7 +346,7 @@ const BookingFlow: React.FC = () => {
     </motion.div>
   );
 
-  // Step 3: Order Summary (Keep your existing Step3 code)
+  // Step 3: Order Summary
   const Step3 = () => (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
       <div className="flex items-center justify-center gap-2 mb-8">
@@ -411,9 +411,11 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
+      {/* ✅ Promo Code Input with name="promoCode" */}
       <div className="flex gap-2 mb-4">
         <input
           type="text"
+          name="promoCode"
           placeholder="Promo code"
           value={promoCode}
           onChange={(e) => setPromoCode(e.target.value)}

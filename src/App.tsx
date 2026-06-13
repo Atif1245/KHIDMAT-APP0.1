@@ -18,6 +18,7 @@ import CustomerOrders from './pages/CustomerOrders';
 import CustomerChats from './pages/CustomerChats';
 import ContactUs from './pages/ContactUs';
 import HelpCenter from './pages/HelpCenter';
+import ProviderSignup from './pages/ProviderSignup';
 
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
           <Route path="/customer-orders" element={<CustomerOrders />} />
           <Route path="/customer-chats" element={<CustomerChats />} />
           <Route path="/contact-us" element={<ContactUs />} />
+          <Route path="/provider-signup" element={<ProviderSignup />} />
           <Route path="/help-center" element={<HelpCenter />} />
         </Routes>
       </AppProvider>

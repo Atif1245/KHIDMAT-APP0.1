@@ -1,30 +1,40 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, Phone, Mail, MapPin, Lock, Check, ArrowLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Lock, Briefcase, DollarSign, Clock, Check, ArrowLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { pakistanCities } from '../data/services';
 import { supabase } from '../lib/supabase';
 
 type PasswordStrength = 'weak' | 'medium' | 'strong';
 
-export default function CustomerSignup() {
+export default function ProviderSignup() {
   const navigate = useNavigate();
   const { setUser } = useApp();
   const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
     email: '',
     city: '',
+    category: 'Plumber',
+    experience: '',
+    hourlyRate: '',
     password: '',
+    confirmPassword: '',
     agreeToTerms: false,
   });
-  const [showPassword, setShowPassword] = useState(false);  // ✅ Fixed
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchCity, setSearchCity] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  const categories = [
+    'Plumber', 'Electrician', 'AC Repair', 'Carpenter', 
+    'Painter', 'Mechanic', 'Cleaner', 'Tutor', 'Driver', 'Chef'
+  ];
 
   const getPasswordStrength = (pwd: string): PasswordStrength => {
     if (pwd.length < 6) return 'weak';
@@ -38,7 +48,7 @@ export default function CustomerSignup() {
     city.toLowerCase().includes(searchCity.toLowerCase())
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -89,6 +99,21 @@ export default function CustomerSignup() {
         setError('Please select your city');
         return false;
       }
+      if (!formData.category) {
+        setError('Please select your service category');
+        return false;
+      }
+      if (!formData.experience) {
+        setError('Please enter your experience');
+        return false;
+      }
+      if (!formData.hourlyRate) {
+        setError('Please enter your hourly rate');
+        return false;
+      }
+    }
+
+    if (step === 3) {
       if (!formData.password.trim()) {
         setError('Please enter a password');
         return false;
@@ -97,9 +122,10 @@ export default function CustomerSignup() {
         setError('Password must be at least 6 characters');
         return false;
       }
-    }
-
-    if (step === 3) {
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        return false;
+      }
       if (!formData.agreeToTerms) {
         setError('Please agree to the Terms of Service');
         return false;
@@ -118,7 +144,6 @@ export default function CustomerSignup() {
     }
   };
 
-  // ✅ CHECK IF USER ALREADY EXISTS
   const checkUserExists = async (email: string) => {
     const { data, error } = await supabase
       .from('users')
@@ -129,7 +154,6 @@ export default function CustomerSignup() {
     return !error && data;
   };
 
-  // ✅ SAVE USER TO SUPABASE
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -141,7 +165,6 @@ export default function CustomerSignup() {
     setLoading(true);
 
     try {
-      // Check if user already exists
       const userExists = await checkUserExists(formData.email);
       if (userExists) {
         setError('User with this email already exists. Please sign in instead.');
@@ -149,8 +172,7 @@ export default function CustomerSignup() {
         return;
       }
 
-      // ✅ Insert new user into Supabase
-      const { data, error: supabaseError } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .insert([
           {
@@ -159,35 +181,53 @@ export default function CustomerSignup() {
             phone: formData.phoneNumber,
             city: formData.city,
             password: formData.password,
-            role: 'customer',
-            created_at: new Date().toISOString(),
+            role: 'provider',
           }
         ])
         .select()
         .single();
 
-      if (supabaseError) {
-        console.error('Supabase error:', supabaseError);
-        setError(supabaseError.message || 'Sign up failed. Please try again.');
+      if (userError) {
+        console.error('User insert error:', userError);
+        setError(userError.message || 'Sign up failed. Please try again.');
         setLoading(false);
         return;
       }
 
-      // ✅ Save user to context and localStorage
-      const userData = {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        city: data.city,
-        role: data.role || 'customer',
+      const { error: providerError } = await supabase
+        .from('providers')
+        .insert([
+          {
+            name: formData.fullName,
+            category: formData.category,
+            city: formData.city,
+            experience: formData.experience + '+ years',
+            price: parseInt(formData.hourlyRate),
+            phone: formData.phoneNumber,
+            verified: false,
+            rating: 0,
+            reviews: 0,
+          }
+        ]);
+
+      if (providerError) {
+        console.error('Provider insert error:', providerError);
+        setError('Failed to create provider profile');
+        setLoading(false);
+        return;
+      }
+
+      const userInfo = {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        role: 'provider',
       };
       
-      setUser(userData);
-      localStorage.setItem('khidmat_user', JSON.stringify(userData));
+      setUser(userInfo);
+      localStorage.setItem('khidmat_user', JSON.stringify(userInfo));
       
-      // ✅ Redirect to home
-      navigate('/customer-home');
+      navigate('/provider-dashboard');
       
     } catch (err) {
       console.error('Signup error:', err);
@@ -226,21 +266,14 @@ export default function CustomerSignup() {
           animate={{ opacity: 1, y: 0 }}
           className="relative z-10 px-4"
         >
-          <h1 className="text-4xl md:text-5xl font-bold mb-3">Join the Family</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-3">Become a Provider</h1>
           <p className="text-lg opacity-90 max-w-md mx-auto">
-            Become part of Pakistan's largest service network
+            Join Pakistan's largest service network and start earning
           </p>
         </motion.div>
 
-        <svg
-          className="absolute bottom-0 w-full h-20 text-white"
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,30 Q300,80 600,30 T1200,30 L1200,120 L0,120 Z"
-            fill="currentColor"
-          />
+        <svg className="absolute bottom-0 w-full h-20 text-white" viewBox="0 0 1200 120" preserveAspectRatio="none">
+          <path d="M0,30 Q300,80 600,30 T1200,30 L1200,120 L0,120 Z" fill="currentColor" />
         </svg>
       </div>
 
@@ -248,7 +281,7 @@ export default function CustomerSignup() {
       <motion.button
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        onClick={() => navigate('/customer-signin')}
+        onClick={() => navigate('/role-selection')}
         className="absolute top-6 left-6 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow z-20"
       >
         <ArrowLeft size={24} className="text-[#005F54]" />
@@ -264,10 +297,10 @@ export default function CustomerSignup() {
           {/* Header */}
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="text-center mb-8">
             <motion.h2 variants={itemVariants} className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-              Create Account
+              Provider Account
             </motion.h2>
             <motion.p variants={itemVariants} className="text-sm text-[#005F54] urdu font-medium mb-4">
-              نیا اکاؤنٹ بنائیں
+              پرووائیڈر اکاؤنٹ
             </motion.p>
 
             <motion.div variants={itemVariants} className="flex justify-center gap-2">
@@ -284,9 +317,7 @@ export default function CustomerSignup() {
                 />
               ))}
             </motion.div>
-            <p className="text-xs text-gray-500 mt-3 font-medium">
-              Step {step} of 3
-            </p>
+            <p className="text-xs text-gray-500 mt-3 font-medium">Step {step} of 3</p>
           </motion.div>
 
           {/* Form */}
@@ -316,8 +347,8 @@ export default function CustomerSignup() {
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleInputChange}
-                      placeholder="Muhammad Ali"
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50 font-medium"
+                      placeholder="Ahmed Raza"
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50"
                     />
                   </div>
                 </motion.div>
@@ -327,16 +358,14 @@ export default function CustomerSignup() {
                   <div className="relative">
                     <Phone size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
                     <div className="flex">
-                      <span className="flex items-center pl-4 pr-3 bg-gray-50 border-2 border-r-0 border-gray-200 rounded-l-2xl font-semibold text-gray-700">
-                        +92
-                      </span>
+                      <span className="flex items-center pl-4 pr-3 bg-gray-50 border-2 border-r-0 border-gray-200 rounded-l-2xl font-semibold">+92</span>
                       <input
                         type="tel"
                         name="phoneNumber"
                         value={formData.phoneNumber}
                         onChange={handleInputChange}
                         placeholder="300 1234567"
-                        className="flex-1 pr-4 py-3 border-2 border-gray-200 rounded-r-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50 font-medium"
+                        className="flex-1 pr-4 py-3 border-2 border-gray-200 rounded-r-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
                       />
                     </div>
                   </div>
@@ -351,55 +380,92 @@ export default function CustomerSignup() {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="you@example.com"
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50 font-medium"
+                      placeholder="ahmed@example.com"
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
                     />
                   </div>
                 </motion.div>
               </>
             )}
 
-            {/* Step 2: Location & Password */}
+            {/* Step 2: Professional Info */}
             {step === 2 && (
               <>
                 <motion.div variants={itemVariants}>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
                   <div className="relative">
-                    <MapPin size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54] z-10" />
+                    <MapPin size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
                     <input
                       type="text"
+                      name="city"
                       value={searchCity || formData.city}
-                      onChange={(e) => {
-                        setSearchCity(e.target.value);
-                        setShowCityDropdown(true);
-                      }}
+                      onChange={(e) => { setSearchCity(e.target.value); setShowCityDropdown(true); }}
                       onFocus={() => setShowCityDropdown(true)}
                       placeholder="Select your city"
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50 font-medium"
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
                     />
-
                     {showCityDropdown && filteredCities.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-2xl shadow-lg z-20 max-h-48 overflow-y-auto"
-                      >
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-2xl shadow-lg z-20 max-h-48 overflow-y-auto">
                         {filteredCities.map((city, idx) => (
-                          <motion.button
-                            key={idx}
-                            type="button"
-                            onClick={() => handleCitySelect(city)}
-                            className="w-full px-4 py-3 text-left hover:bg-gray-100 border-b border-gray-100 last:border-b-0 font-medium text-gray-700"
-                          >
+                          <button key={idx} type="button" onClick={() => handleCitySelect(city)} className="w-full px-4 py-3 text-left hover:bg-gray-100 border-b border-gray-100">
                             {city}
-                          </motion.button>
+                          </button>
                         ))}
-                      </motion.div>
+                      </div>
                     )}
                   </div>
                 </motion.div>
 
-                {/* Password Field with Show/Hide */}
+                <motion.div variants={itemVariants}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Service Category</label>
+                  <div className="relative">
+                    <Briefcase size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
+                    <select
+                      name="category"
+                      value={formData.category}
+                      onChange={handleInputChange}
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50 appearance-none"
+                    >
+                      {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                </motion.div>
+
+                <motion.div variants={itemVariants}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Years of Experience</label>
+                  <div className="relative">
+                    <Clock size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
+                    <input
+                      type="number"
+                      name="experience"
+                      value={formData.experience}
+                      onChange={handleInputChange}
+                      placeholder="8"
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
+                    />
+                  </div>
+                </motion.div>
+
+                <motion.div variants={itemVariants}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Hourly Rate (PKR)</label>
+                  <div className="relative">
+                    <DollarSign size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
+                    <input
+                      type="number"
+                      name="hourlyRate"
+                      value={formData.hourlyRate}
+                      onChange={handleInputChange}
+                      placeholder="800"
+                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
+                    />
+                  </div>
+                </motion.div>
+              </>
+            )}
+
+            {/* Step 3: Password & Terms */}
+            {step === 3 && (
+              <>
                 <motion.div variants={itemVariants}>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
                   <div className="relative">
@@ -410,170 +476,99 @@ export default function CustomerSignup() {
                       value={formData.password}
                       onChange={handleInputChange}
                       placeholder="••••••••"
-                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none transition-colors bg-gray-50 font-medium"
+                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#005F54]"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
                     >
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
                   </div>
-
                   {formData.password && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
-                      <div className="flex gap-2 mb-2">
-                        <div
-                          className={`flex-1 h-2 rounded-full transition-colors ${
-                            passwordStrength === 'weak'
-                              ? 'bg-red-500'
-                              : passwordStrength === 'medium'
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                          }`}
-                        />
-                        <div
-                          className={`flex-1 h-2 rounded-full transition-colors ${
-                            passwordStrength === 'medium' || passwordStrength === 'strong'
-                              ? passwordStrength === 'medium'
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                              : 'bg-gray-200'
-                          }`}
-                        />
-                        <div
-                          className={`flex-1 h-2 rounded-full transition-colors ${
-                            passwordStrength === 'strong' ? 'bg-green-500' : 'bg-gray-200'
-                          }`}
-                        />
+                    <div className="mt-2">
+                      <div className="flex gap-2">
+                        <div className={`flex-1 h-1.5 rounded-full ${passwordStrength === 'weak' ? 'bg-red-500' : passwordStrength === 'medium' ? 'bg-yellow-500' : 'bg-green-500'}`} />
+                        <div className={`flex-1 h-1.5 rounded-full ${passwordStrength === 'medium' || passwordStrength === 'strong' ? (passwordStrength === 'medium' ? 'bg-yellow-500' : 'bg-green-500') : 'bg-gray-200'}`} />
+                        <div className={`flex-1 h-1.5 rounded-full ${passwordStrength === 'strong' ? 'bg-green-500' : 'bg-gray-200'}`} />
                       </div>
-                      <p
-                        className={`text-xs font-semibold ${
-                          passwordStrength === 'weak'
-                            ? 'text-red-500'
-                            : passwordStrength === 'medium'
-                              ? 'text-yellow-500'
-                              : 'text-green-500'
-                        }`}
-                      >
-                        Strength: {passwordStrength.charAt(0).toUpperCase() + passwordStrength.slice(1)}
-                      </p>
-                    </motion.div>
+                      <p className="text-xs mt-1 text-gray-500">Strength: {passwordStrength}</p>
+                    </div>
                   )}
                 </motion.div>
-              </>
-            )}
 
-            {/* Step 3: Terms */}
-            {step === 3 && (
-              <>
-                <motion.div variants={itemVariants} className="space-y-4">
+                <motion.div variants={itemVariants}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password</label>
+                  <div className="relative">
+                    <Lock size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleInputChange}
+                      placeholder="••••••••"
+                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-2xl focus:border-[#005F54] focus:outline-none bg-gray-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </motion.div>
+
+                <motion.div variants={itemVariants}>
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
                       name="agreeToTerms"
-                      id="terms"
                       checked={formData.agreeToTerms}
                       onChange={handleCheckboxChange}
-                      className="w-5 h-5 mt-1 accent-[#005F54] rounded cursor-pointer"
+                      className="w-5 h-5 mt-1 accent-[#005F54] rounded"
                     />
-                    <label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer">
-                      I agree to the{' '}
-                      <button type="button" className="text-[#005F54] font-semibold hover:underline">
-                        Terms of Service
-                      </button>{' '}
-                      and{' '}
-                      <button type="button" className="text-[#005F54] font-semibold hover:underline">
-                        Privacy Policy
-                      </button>
+                    <label className="text-sm text-gray-600">
+                      I agree to the Terms of Service and Privacy Policy
                     </label>
-                  </div>
-
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <p className="text-sm font-semibold text-gray-700 mb-4">Why join KHIDMAT?</p>
-                    <div className="space-y-3">
-                      {[
-                        { icon: '✓', label: 'Verified Providers' },
-                        { icon: '🔒', label: 'Secure Payments' },
-                        { icon: '🕒', label: '24/7 Support' },
-                        { icon: '💰', label: 'Best Prices' },
-                      ].map((benefit, idx) => (
-                        <motion.div
-                          key={idx}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: idx * 0.1 }}
-                          className="flex items-center gap-3"
-                        >
-                          <span className="text-lg">{benefit.icon}</span>
-                          <span className="text-sm font-medium text-gray-700">{benefit.label}</span>
-                        </motion.div>
-                      ))}
-                    </div>
                   </div>
                 </motion.div>
               </>
             )}
 
-            {/* Error Message */}
             {error && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
                 {error}
               </motion.div>
             )}
 
-            {/* Navigation Buttons */}
             <motion.div variants={itemVariants} className="flex gap-3 pt-4">
               {step > 1 && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={() => setStep(step - 1)}
-                  className="flex-1 py-3 rounded-2xl font-bold text-[#005F54] border-2 border-[#005F54] hover:bg-gray-50 transition-all"
-                >
+                <button type="button" onClick={() => setStep(step - 1)} className="flex-1 py-3 rounded-2xl font-bold text-[#005F54] border-2 border-[#005F54] hover:bg-gray-50 transition-all">
                   Back
-                </motion.button>
+                </button>
               )}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 type="submit"
                 disabled={loading}
                 className="flex-1 py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-[#005F54] to-[#00B4D8] hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
               >
                 {step < 3 ? (
-                  <>
-                    Next
-                    <ChevronRight size={20} />
-                  </>
+                  <>Next <ChevronRight size={20} /></>
                 ) : loading ? (
                   'Creating Account...'
                 ) : (
-                  <>
-                    Create Account
-                    <Check size={20} />
-                  </>
+                  <>Create Account <Check size={20} /></>
                 )}
-              </motion.button>
+              </button>
             </motion.div>
           </motion.form>
 
-          <motion.div
-            variants={itemVariants}
-            className="text-center mt-8 pt-6 border-t border-gray-200"
-          >
+          <motion.div className="text-center mt-8 pt-6 border-t border-gray-200">
             <p className="text-gray-600 text-sm">
-              Already have an account?{' '}
-              <button
-                onClick={() => navigate('/customer-signin')}
-                className="text-[#005F54] font-bold hover:underline"
-              >
+              Already have a provider account?{' '}
+              <button onClick={() => navigate('/customer-signin')} className="text-[#005F54] font-bold hover:underline">
                 Sign In
               </button>
             </p>

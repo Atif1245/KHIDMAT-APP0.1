@@ -6,7 +6,7 @@ import { useApp } from '../contexts/AppContext';
 
 const RoleSelection: React.FC = () => {
   const navigate = useNavigate();
-  const { setLanguage } = useApp();
+  const { setLanguage, language } = useApp();
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -27,8 +27,6 @@ const RoleSelection: React.FC = () => {
       transition: { duration: 0.6, ease: 'easeOut' as const },
     },
   };
-
-  const { language } = useApp();
 
   return (
     <div className="min-h-screen bg-surface dark:bg-surface-dark transition-colors duration-300 overflow-hidden">
@@ -117,9 +115,9 @@ const RoleSelection: React.FC = () => {
                 </p>
               </motion.div>
 
-              {/* Button */}
+              {/* Button - ✅ Fixed: Provider Signup pe jayega */}
               <motion.button
-                onClick={() => navigate('/provider-dashboard')}
+                onClick={() => navigate('/provider-signup')}
                 className="w-full bg-gradient-to-r from-primary to-blue-500 hover:from-primary-dark hover:to-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -172,7 +170,7 @@ const RoleSelection: React.FC = () => {
                 </p>
               </motion.div>
 
-              {/* Button */}
+              {/* Button - ✅ Fixed: Customer Signin pe jayega */}
               <motion.button
                 onClick={() => navigate('/customer-signin')}
                 className="w-full bg-gradient-to-r from-secondary to-orange-400 hover:from-[#E67E00] hover:to-orange-500 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg"

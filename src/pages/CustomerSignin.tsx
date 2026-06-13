@@ -209,6 +209,7 @@ export default function CustomerSignin() {
                 <Mail size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
                 <input
                   type="email"
+                  name="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -234,6 +235,7 @@ export default function CustomerSignin() {
                 <Lock size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#005F54]" />
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
