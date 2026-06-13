@@ -95,7 +95,7 @@ const BookingFlow: React.FC = () => {
     if (promoCode.trim()) setPromoApplied(true);
   };
 
-  // ✅ SAVE BOOKING TO DATABASE (FIXED UUID ERROR)
+  // ✅ COMPLETELY FIXED saveBookingToDatabase
   const saveBookingToDatabase = async () => {
     setIsSaving(true);
     setBookingError('');
@@ -110,28 +110,26 @@ const BookingFlow: React.FC = () => {
         return false;
       }
 
-      // Get provider ID properly
-      let providerId = selectedProvider?.id;
+      // ✅ FIX: Always fetch provider UUID from database by name and city
+      let providerId = null;
       
-      if (providerId && typeof providerId === 'number') {
-        providerId = providerId.toString();
-      }
+      console.log('Searching for provider:', selectedProvider?.name, selectedProvider?.city);
       
-      if (!providerId || providerId === '1') {
-        const { data: providerData, error: providerError } = await supabase
-          .from('providers')
-          .select('id')
-          .eq('name', selectedProvider?.name)
-          .eq('city', selectedProvider?.city)
-          .single();
-        
-        if (providerData && !providerError) {
-          providerId = providerData.id;
-        } else {
-          setBookingError('Invalid provider. Please try again.');
-          setIsSaving(false);
-          return false;
-        }
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('name', selectedProvider?.name)
+        .eq('city', selectedProvider?.city)
+        .single();
+      
+      if (providerData && !providerError) {
+        providerId = providerData.id;
+        console.log('Found provider UUID:', providerId);
+      } else {
+        console.error('Provider not found:', providerError);
+        setBookingError('Provider not found. Please try again.');
+        setIsSaving(false);
+        return false;
       }
 
       const bookingId = 'KH-' + Date.now();
@@ -148,6 +146,7 @@ const BookingFlow: React.FC = () => {
             booking_time: selectedTime,
             amount: totalPrice,
             status: 'confirmed',
+            payment_method: selectedPayment,
             customer_address: profile?.address || 'Not provided',
             customer_phone: profile?.phone || currentUser?.phone || 'Not provided',
             created_at: new Date().toISOString(),
@@ -161,6 +160,7 @@ const BookingFlow: React.FC = () => {
         return false;
       }
 
+      console.log('Booking saved successfully!');
       setIsSaving(false);
       return true;
     } catch (err) {
@@ -411,7 +411,7 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* ✅ Promo Code Input with name="promoCode" */}
+      {/* Promo Code Input */}
       <div className="flex gap-2 mb-4">
         <input
           type="text"
