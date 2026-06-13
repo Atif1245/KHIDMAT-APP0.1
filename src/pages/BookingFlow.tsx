@@ -95,7 +95,7 @@ const BookingFlow: React.FC = () => {
     if (promoCode.trim()) setPromoApplied(true);
   };
 
-  // ✅ COMPLETELY FIXED saveBookingToDatabase
+  // ✅ FIXED: Using maybeSingle() instead of single() to avoid 406 error
   const saveBookingToDatabase = async () => {
     setIsSaving(true);
     setBookingError('');
@@ -110,17 +110,17 @@ const BookingFlow: React.FC = () => {
         return false;
       }
 
-      // ✅ FIX: Always fetch provider UUID from database by name and city
       let providerId = null;
       
       console.log('Searching for provider:', selectedProvider?.name, selectedProvider?.city);
       
+      // ✅ .maybeSingle() instead of .single()
       const { data: providerData, error: providerError } = await supabase
         .from('providers')
         .select('id')
         .eq('name', selectedProvider?.name)
         .eq('city', selectedProvider?.city)
-        .single();
+        .maybeSingle();
       
       if (providerData && !providerError) {
         providerId = providerData.id;
