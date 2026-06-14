@@ -40,7 +40,6 @@ const BookingFlow: React.FC = () => {
   const [bookingError, setBookingError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Get selected provider from localStorage
   useEffect(() => {
     const savedProvider = localStorage.getItem('selectedProvider');
     if (savedProvider) {
@@ -76,7 +75,6 @@ const BookingFlow: React.FC = () => {
 
   const calendarDays = generateCalendar();
 
-  // Calculate price based on selected provider
   const calculatePrice = () => {
     const basePrice = selectedProvider?.price || 800;
     const travelFee = 200;
@@ -95,7 +93,7 @@ const BookingFlow: React.FC = () => {
     if (promoCode.trim()) setPromoApplied(true);
   };
 
-  // ✅ FIXED: Using maybeSingle() instead of single() to avoid 406 error
+  // ✅ FINAL FIXED VERSION - Direct provider ID use karo
   const saveBookingToDatabase = async () => {
     setIsSaving(true);
     setBookingError('');
@@ -110,24 +108,15 @@ const BookingFlow: React.FC = () => {
         return false;
       }
 
-      let providerId = null;
+      // ✅ DIRECTLY USE PROVIDER ID (NO DATABASE QUERY!)
+      const providerId = selectedProvider?.id;
       
-      console.log('Searching for provider:', selectedProvider?.name, selectedProvider?.city);
+      console.log('Provider ID from localStorage:', providerId);
+      console.log('Provider name:', selectedProvider?.name);
+      console.log('Provider city:', selectedProvider?.city);
       
-      // ✅ .maybeSingle() instead of .single()
-      const { data: providerData, error: providerError } = await supabase
-        .from('providers')
-        .select('id')
-        .eq('name', selectedProvider?.name)
-        .eq('city', selectedProvider?.city)
-        .maybeSingle();
-      
-      if (providerData && !providerError) {
-        providerId = providerData.id;
-        console.log('Found provider UUID:', providerId);
-      } else {
-        console.error('Provider not found:', providerError);
-        setBookingError('Provider not found. Please try again.');
+      if (!providerId) {
+        setBookingError('Invalid provider. Please try again.');
         setIsSaving(false);
         return false;
       }
@@ -277,7 +266,7 @@ const BookingFlow: React.FC = () => {
     </motion.div>
   );
 
-  // Step 2: Select Date & Time
+  // Step 2: Select Date & Time (keep your existing code)
   const Step2 = () => (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Select Date & Time</h2>
@@ -346,7 +335,7 @@ const BookingFlow: React.FC = () => {
     </motion.div>
   );
 
-  // Step 3: Order Summary
+  // Step 3: Order Summary (keep your existing code)
   const Step3 = () => (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="min-h-screen bg-gray-50 dark:bg-gray-900 px-4 pt-8 pb-24 max-w-md mx-auto">
       <div className="flex items-center justify-center gap-2 mb-8">
@@ -411,7 +400,6 @@ const BookingFlow: React.FC = () => {
         </div>
       </div>
 
-      {/* Promo Code Input */}
       <div className="flex gap-2 mb-4">
         <input
           type="text"
