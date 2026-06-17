@@ -16,7 +16,7 @@ export const categories = [
 export const providers = [
   // ========== LAHORE PROVIDERS ==========
   {
-    id: '1',
+    id: '550e8400-e29b-41d4-a716-446655440001',
     name: 'Ahmed Raza',
     category: 'Plumber',
     city: 'Lahore',
@@ -32,7 +32,7 @@ export const providers = [
     phone: '+92 300 1234567',
   },
   {
-    id: '2',
+    id: '550e8400-e29b-41d4-a716-446655440002',
     name: 'Bilal Khan',
     category: 'Electrician',
     city: 'Lahore',
@@ -48,7 +48,7 @@ export const providers = [
     phone: '+92 300 2345678',
   },
   {
-    id: '3',
+    id: '550e8400-e29b-41d4-a716-446655440003',
     name: 'Sara Ahmed',
     category: 'AC Repair',
     city: 'Lahore',
@@ -64,7 +64,7 @@ export const providers = [
     phone: '+92 300 3456789',
   },
   {
-    id: '4',
+    id: '550e8400-e29b-41d4-a716-446655440004',
     name: 'Usman Sheikh',
     category: 'Painter',
     city: 'Lahore',
@@ -80,7 +80,7 @@ export const providers = [
     phone: '+92 300 4567890',
   },
   {
-    id: '5',
+    id: '550e8400-e29b-41d4-a716-446655440005',
     name: 'Ali Raza',
     category: 'Plumber',
     city: 'Lahore',
@@ -96,7 +96,7 @@ export const providers = [
     phone: '+92 300 5678901',
   },
   {
-    id: '6',
+    id: '550e8400-e29b-41d4-a716-446655440006',
     name: 'Fatima Khan',
     category: 'AC Repair',
     city: 'Lahore',
@@ -114,7 +114,7 @@ export const providers = [
 
   // ========== KARACHI PROVIDERS ==========
   {
-    id: '7',
+    id: '550e8400-e29b-41d4-a716-446655440007',
     name: 'Kamran Javed',
     category: 'Plumber',
     city: 'Karachi',
@@ -130,7 +130,7 @@ export const providers = [
     phone: '+92 300 7890123',
   },
   {
-    id: '8',
+    id: '550e8400-e29b-41d4-a716-446655440008',
     name: 'Nadia Ali',
     category: 'Electrician',
     city: 'Karachi',
@@ -146,7 +146,7 @@ export const providers = [
     phone: '+92 300 8901234',
   },
   {
-    id: '9',
+    id: '550e8400-e29b-41d4-a716-446655440009',
     name: 'Rizwan Ahmed',
     category: 'AC Repair',
     city: 'Karachi',
@@ -162,7 +162,7 @@ export const providers = [
     phone: '+92 300 9012345',
   },
   {
-    id: '10',
+    id: '550e8400-e29b-41d4-a716-446655440010',
     name: 'Sadia Khan',
     category: 'Cleaner',
     city: 'Karachi',
@@ -180,7 +180,7 @@ export const providers = [
 
   // ========== ISLAMABAD PROVIDERS ==========
   {
-    id: '11',
+    id: '550e8400-e29b-41d4-a716-446655440011',
     name: 'Tariq Mehmood',
     category: 'Plumber',
     city: 'Islamabad',
@@ -196,7 +196,7 @@ export const providers = [
     phone: '+92 300 1234567',
   },
   {
-    id: '12',
+    id: '550e8400-e29b-41d4-a716-446655440012',
     name: 'Ayesha Malik',
     category: 'Tutor',
     city: 'Islamabad',
@@ -212,7 +212,7 @@ export const providers = [
     phone: '+92 300 2345678',
   },
   {
-    id: '13',
+    id: '550e8400-e29b-41d4-a716-446655440013',
     name: 'Omar Farooq',
     category: 'Electrician',
     city: 'Islamabad',
@@ -230,7 +230,7 @@ export const providers = [
 
   // ========== RAWALPINDI PROVIDERS ==========
   {
-    id: '14',
+    id: '550e8400-e29b-41d4-a716-446655440014',
     name: 'Shahid Abbas',
     category: 'Plumber',
     city: 'Rawalpindi',
@@ -246,7 +246,7 @@ export const providers = [
     phone: '+92 300 4567890',
   },
   {
-    id: '15',
+    id: '550e8400-e29b-41d4-a716-446655440015',
     name: 'Rabia Naeem',
     category: 'Tutor',
     city: 'Rawalpindi',
@@ -264,7 +264,7 @@ export const providers = [
 
   // ========== MULTAN PROVIDERS ==========
   {
-    id: '16',
+    id: '550e8400-e29b-41d4-a716-446655440016',
     name: 'Naeem Akhtar',
     category: 'Plumber',
     city: 'Multan',
@@ -282,7 +282,7 @@ export const providers = [
 
   // ========== PESHAWAR PROVIDERS ==========
   {
-    id: '17',
+    id: '550e8400-e29b-41d4-a716-446655440017',
     name: 'Javed Khan',
     category: 'Electrician',
     city: 'Peshawar',
@@ -300,7 +300,7 @@ export const providers = [
 
   // ========== SIALKOT PROVIDERS ==========
   {
-    id: '18',
+    id: '550e8400-e29b-41d4-a716-446655440018',
     name: 'Imran Ali',
     category: 'Plumber',
     city: 'Sialkot',
@@ -318,7 +318,7 @@ export const providers = [
 
   // ========== FAISALABAD PROVIDERS ==========
   {
-    id: '19',
+    id: '550e8400-e29b-41d4-a716-446655440019',
     name: 'Khalid Mahmood',
     category: 'Plumber',
     city: 'Faisalabad',
@@ -336,10 +336,10 @@ export const providers = [
 ];
 
 export const promoBanners = [
-  { id: '1', title: '20% Off', subtitle: 'On your first booking', gradient: 'from-emerald-600 to-emerald-400' },
-  { id: '2', title: 'Refer & Earn', subtitle: 'Get Rs 500 per referral', gradient: 'from-orange-500 to-orange-400' },
-  { id: '3', title: 'Emergency Service', subtitle: 'Available 24/7', gradient: 'from-red-500 to-red-400' },
-  { id: '4', title: 'Weekly Discount', subtitle: 'Save up to 30%', gradient: 'from-purple-600 to-purple-400' },
+  { id: '550e8400-e29b-41d4-a716-446655440001', title: '20% Off', subtitle: 'On your first booking', gradient: 'from-emerald-600 to-emerald-400' },
+  { id: '550e8400-e29b-41d4-a716-446655440002', title: 'Refer & Earn', subtitle: 'Get Rs 500 per referral', gradient: 'from-orange-500 to-orange-400' },
+  { id: '550e8400-e29b-41d4-a716-446655440003', title: 'Emergency Service', subtitle: 'Available 24/7', gradient: 'from-red-500 to-red-400' },
+  { id: '550e8400-e29b-41d4-a716-446655440004', title: 'Weekly Discount', subtitle: 'Save up to 30%', gradient: 'from-purple-600 to-purple-400' },
 ];
 
 export const pakistanCities = [
