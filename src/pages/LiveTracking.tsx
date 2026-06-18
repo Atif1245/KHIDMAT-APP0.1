@@ -9,27 +9,17 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 
-// ✅ Leaflet Map imports
+// ✅ CORRECT Leaflet imports
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Fix default marker icons
+// ✅ Fix default marker icons - CORRECT way
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
-
-// Custom car icon
-const carIcon = L.divIcon({
-  html: `<div style="background: #005F54; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 0 20px rgba(0,95,84,0.4);">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
-  </div>`,
-  className: '',
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
 });
 
 const LiveTracking: React.FC = () => {
@@ -159,7 +149,6 @@ const LiveTracking: React.FC = () => {
           zoom={15} 
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
-          whenReady={() => setMapLoaded(true)}
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -180,8 +169,8 @@ const LiveTracking: React.FC = () => {
             <Popup>Your Location</Popup>
           </Marker>
           
-          {/* Provider marker with car icon */}
-          <Marker position={providerLocation} icon={carIcon}>
+          {/* Provider marker with simple circle */}
+          <Marker position={providerLocation}>
             <Popup>Provider is on the way!</Popup>
           </Marker>
         </MapContainer>
@@ -398,9 +387,9 @@ const LiveTracking: React.FC = () => {
 
       {/* Completed State Overlay */}
       {orderStatus === 'completed' && (
-        <div className="fixed inset-0 bg-gradient-to-br from-green-500/95 to-emerald-600/95 z-50 flex items-center justify-center p-6 animate-[fadeIn_0.5s_ease-out]">
+        <div className="fixed inset-0 bg-gradient-to-br from-green-500/95 to-emerald-600/95 z-50 flex items-center justify-center p-6">
           <div className="text-center text-white max-w-sm">
-            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-[bounceIn_0.6s_ease-out]">
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl">
               <CheckCircle size={48} className="text-green-500" />
             </div>
             <h2 className="text-3xl font-bold mb-2">Service Complete! 🎉</h2>
@@ -422,18 +411,6 @@ const LiveTracking: React.FC = () => {
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes bounceIn {
-          0% { transform: scale(0); opacity: 0; }
-          50% { transform: scale(1.1); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 };
