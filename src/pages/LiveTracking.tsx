@@ -1,407 +1,440 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Phone,
-  Share2,
-  Home,
-  Car,
-  CheckCircle2,
-  Circle,
-  MessageCircle,
-  Star,
-  X,
-  Send,
-} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  ArrowLeft, Phone, MessageCircle, Navigation, 
+  Clock, MapPin, CheckCircle, AlertCircle,
+  Star, User, Calendar, ChevronRight, 
+  Share2, HelpCircle, Copy, Check,
+  X
+} from 'lucide-react';
+import { useApp } from '../contexts/AppContext';
+
+// ✅ Leaflet Map imports
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix default marker icons
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+// Custom car icon
+const carIcon = L.divIcon({
+  html: `<div style="background: #005F54; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 0 20px rgba(0,95,84,0.4);">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+  </div>`,
+  className: '',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
 
 const LiveTracking: React.FC = () => {
   const navigate = useNavigate();
-
+  const { profile } = useApp();
   const [eta, setEta] = useState(8);
-  const [seconds, setSeconds] = useState(42);
-  const [isCompleting, setIsCompleting] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [selectedTip, setSelectedTip] = useState(0);
-  const [review, setReview] = useState('');
-  const [showChatPreview, setShowChatPreview] = useState(false);
-  const [markerPosition, setMarkerPosition] = useState(0);
+  const [orderStatus, setOrderStatus] = useState<'confirmed' | 'assigned' | 'onway' | 'completed'>('onway');
+  const [providerLocation, setProviderLocation] = useState<[number, number]>([31.5204, 74.3587]);
+  const [customerLocation] = useState<[number, number]>([31.5154, 74.3517]);
+  const [showCopied, setShowCopied] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
+  // Simulate ETA countdown
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSeconds(prev => {
-        if (prev === 0) {
-          if (eta > 0) { setEta(e => e - 1); return 59; }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [eta]);
+    if (orderStatus === 'onway' && eta > 0) {
+      const timer = setInterval(() => {
+        setEta(prev => {
+          if (prev <= 1) {
+            setOrderStatus('completed');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 3000);
+      return () => clearInterval(timer);
+    }
+  }, [orderStatus, eta]);
 
+  // Simulate provider movement
   useEffect(() => {
-    const interval = setInterval(() => {
-      setMarkerPosition(prev => (prev + 2) % 100);
-    }, 100);
-    return () => clearInterval(interval);
-  }, []);
+    if (orderStatus === 'onway') {
+      const timer = setInterval(() => {
+        setProviderLocation(prev => {
+          const lat = prev[0] + 0.0003;
+          const lng = prev[1] + 0.0004;
+          return [lat, lng];
+        });
+      }, 4000);
+      return () => clearInterval(timer);
+    }
+  }, [orderStatus]);
 
-  const handleCompleteOrder = () => {
-    if (rating > 0) navigate('/customer-home');
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'confirmed': return 'from-blue-500 to-blue-400';
+      case 'assigned': return 'from-yellow-500 to-yellow-400';
+      case 'onway': return 'from-orange-500 to-orange-400';
+      case 'completed': return 'from-green-500 to-green-400';
+      default: return 'from-gray-400 to-gray-300';
+    }
   };
 
-  const timeline = [
-    { label: 'Confirmed', completed: true, active: false },
-    { label: 'Assigned', completed: true, active: false },
-    { label: 'On Way', completed: false, active: true },
-    { label: 'Complete', completed: false, active: false },
+  const getStatusLabel = (status: string) => {
+    switch(status) {
+      case 'confirmed': return 'Confirmed';
+      case 'assigned': return 'Assigned';
+      case 'onway': return 'On the Way';
+      case 'completed': return 'Completed';
+      default: return status;
+    }
+  };
+
+  const getStatusDotColor = (status: string) => {
+    switch(status) {
+      case 'confirmed': return 'bg-blue-500';
+      case 'assigned': return 'bg-yellow-500';
+      case 'onway': return 'bg-orange-500 animate-pulse';
+      case 'completed': return 'bg-green-500';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  const handleCopyOrderId = () => {
+    navigator.clipboard.writeText('KH-12345');
+    setShowCopied(true);
+    setTimeout(() => setShowCopied(false), 2000);
+  };
+
+  const handleCancelOrder = () => {
+    if (window.confirm('Are you sure you want to cancel this order?')) {
+      alert('Order cancelled');
+      navigate('/customer-orders');
+    }
+  };
+
+  const routeCoordinates: [number, number][] = [
+    [31.5154, 74.3517],
+    [31.5180, 74.3540],
+    [31.5204, 74.3587],
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="min-h-screen bg-surface dark:bg-surface-dark max-w-md mx-auto relative"
-    >
-      {/* Map Section */}
-      <div className="relative w-full h-[50vh] bg-gradient-to-br from-primary-dark to-primary overflow-hidden">
-        {/* Grid */}
-        <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-
-        {/* Animated path */}
-        <motion.svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg" style={{ pointerEvents: 'none' }}>
-          <motion.path
-            d="M 100 100 Q 180 150, 250 200"
-            stroke="white"
-            strokeWidth="2"
-            fill="none"
-            strokeDasharray="10 5"
-            initial={{ strokeDashoffset: 0 }}
-            animate={{ strokeDashoffset: -15 }}
-            transition={{ duration: 1, repeat: Infinity }}
-            opacity="0.6"
-          />
-        </motion.svg>
-
-        {/* Provider marker */}
-        <motion.div
-          className="absolute w-11 h-11 bg-gradient-to-br from-primary-light to-info rounded-full flex items-center justify-center text-white shadow-lg"
-          style={{ left: `${markerPosition}%`, top: '40%', transform: 'translate(-50%, -50%)' }}
-          animate={{ y: [-5, 5, -5] }}
-          transition={{ duration: 0.6, repeat: Infinity }}
-        >
-          <Car size={22} />
-        </motion.div>
-
-        {/* Customer marker */}
-        <div className="absolute w-11 h-11 bg-gradient-to-br from-secondary to-secondary-light rounded-full flex items-center justify-center text-white shadow-lg bottom-20 right-12">
-          <Home size={22} />
-        </div>
-
-        {/* ETA Bubble */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="absolute top-6 right-6 bg-surface-dark/90 dark:bg-surface-dark/90 backdrop-blur border border-primary/30 rounded-xl px-4 py-3"
-        >
-          <p className="text-gray-400 text-xs">ETA</p>
-          <p className="text-white font-bold text-lg">{eta}:{seconds.toString().padStart(2, '0')} min</p>
-        </motion.div>
+    <div className="min-h-screen bg-[#F5F7FA]">
+      {/* Watermark */}
+      <div className="fixed inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] z-0">
+        <span className="text-9xl font-bold text-[#005F54] tracking-widest">KHIDMAT</span>
       </div>
 
-      {/* Status Timeline */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="px-4 py-6 border-b border-gray-100 dark:border-surface-light"
-      >
-        <div className="flex items-center justify-between">
-          {timeline.map((step, idx) => (
-            <React.Fragment key={idx}>
-              <div className="flex flex-col items-center gap-2">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2 + idx * 0.1 }}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                    step.completed ? 'bg-gradient-to-br from-primary to-info text-white'
-                      : step.active ? 'bg-primary/20 border-2 border-primary dark:border-primary-bright text-primary dark:text-primary-bright'
-                        : 'bg-gray-100 dark:bg-surface-light text-gray-400'
-                  }`}
-                >
-                  {step.active && !step.completed ? (
-                    <motion.div animate={{ scale: [1, 1.3, 1], opacity: [1, 0.6, 1] }} transition={{ duration: 2, repeat: Infinity }} className="w-3 h-3 bg-primary dark:bg-primary-bright rounded-full" />
-                  ) : step.completed ? (
-                    <CheckCircle2 size={20} />
-                  ) : (
-                    <Circle size={18} />
-                  )}
-                </motion.div>
-                <span className="text-[10px] text-gray-500 dark:text-gray-400 text-center font-medium">{step.label}</span>
-              </div>
-              {idx < timeline.length - 1 && (
-                <div className={`h-0.5 w-10 ${step.completed ? 'bg-gradient-to-r from-primary to-info' : 'bg-gray-200 dark:bg-surface-light'}`} />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Provider Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="mx-4 my-5 glass glass-border rounded-2xl p-5"
-      >
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-primary to-info rounded-full flex items-center justify-center text-white flex-shrink-0 shadow-md">
-            <span className="text-xl font-bold">AR</span>
-          </div>
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-white/20 px-4 py-3">
+        <div className="flex items-center gap-3 max-w-md mx-auto">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all active:scale-95"
+          >
+            <ArrowLeft size={20} className="text-gray-700" />
+          </button>
           <div className="flex-1">
-            <h3 className="font-bold text-navy dark:text-white">Ahmed Raza</h3>
-            <div className="flex items-center gap-1 text-yellow-500 text-sm">
-              <Star size={14} className="fill-yellow-400" />
-              <span>4.9 (428)</span>
+            <h1 className="text-lg font-bold text-[#0A1628] tracking-tight">Live Tracking</h1>
+            <p className="text-xs text-gray-500">Order #KH-12345</p>
+          </div>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getStatusColor(orderStatus)} text-white text-xs font-semibold shadow-lg`}>
+            <span className={`w-2 h-2 rounded-full ${getStatusDotColor(orderStatus)}`}></span>
+            {getStatusLabel(orderStatus)}
+          </div>
+        </div>
+      </div>
+
+      {/* Map Container */}
+      <div className="relative mx-4 mt-4 rounded-3xl overflow-hidden shadow-2xl" style={{ height: '42vh' }}>
+        <div className="absolute inset-0 bg-gradient-to-b from-[#005F54]/5 to-transparent z-10 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#F5F7FA] to-transparent z-10 pointer-events-none" />
+        
+        <MapContainer 
+          center={providerLocation} 
+          zoom={15} 
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+          whenReady={() => setMapLoaded(true)}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; OpenStreetMap'
+          />
+          
+          {/* Route path */}
+          <Polyline 
+            positions={routeCoordinates} 
+            color="#005F54" 
+            weight={3} 
+            dashArray="8,8"
+            opacity={0.6}
+          />
+          
+          {/* Customer marker */}
+          <Marker position={customerLocation}>
+            <Popup>Your Location</Popup>
+          </Marker>
+          
+          {/* Provider marker with car icon */}
+          <Marker position={providerLocation} icon={carIcon}>
+            <Popup>Provider is on the way!</Popup>
+          </Marker>
+        </MapContainer>
+
+        {/* Map overlay controls */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+          <button className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center hover:bg-gray-50 active:scale-95 transition">
+            <span className="text-lg font-bold text-gray-700">+</span>
+          </button>
+          <button className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center hover:bg-gray-50 active:scale-95 transition">
+            <span className="text-lg font-bold text-gray-700">−</span>
+          </button>
+        </div>
+
+        {/* Distance badge */}
+        <div className="absolute bottom-4 left-4 z-20 bg-white/90 backdrop-blur-md rounded-xl px-4 py-2 shadow-lg border border-white/20">
+          <div className="flex items-center gap-2">
+            <Navigation size={14} className="text-[#005F54]" />
+            <span className="text-sm font-semibold text-gray-700">2.3 km away</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Provider Card - Glassmorphism */}
+      <div className="relative -mt-8 mx-4 z-20">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-5 shadow-2xl border border-white/30">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <img 
+                src="https://ui-avatars.com/api/?name=Ahmed+Raza&background=005F54&color=fff&size=80"
+                alt="Provider"
+                className="w-16 h-16 rounded-full object-cover border-2 border-[#005F54]"
+              />
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-[#0A1628] text-lg">Ahmed Raza</h3>
+                <div className="flex items-center gap-0.5">
+                  <Star size={14} className="fill-yellow-400 text-yellow-400" />
+                  <span className="text-sm font-bold text-gray-700">4.98</span>
+                </div>
+                <span className="bg-blue-500/10 text-blue-600 text-[10px] px-2 py-0.5 rounded-full font-semibold">Verified</span>
+              </div>
+              <p className="text-sm text-gray-500">Professional Plumber</p>
+              <div className="flex items-center gap-3 mt-1.5">
+                <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
+                <span className="text-xs text-gray-400">|</span>
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Clock size={12} /> ETA {eta} min
+                </span>
+              </div>
+            </div>
+            <button className="w-10 h-10 bg-[#005F54]/10 rounded-full flex items-center justify-center hover:bg-[#005F54]/20 transition">
+              <ChevronRight size={18} className="text-[#005F54]" />
+            </button>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100/50">
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#0A1628]">8+</p>
+              <p className="text-xs text-gray-500">Years Exp</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#0A1628]">245</p>
+              <p className="text-xs text-gray-500">Jobs Done</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#0A1628]">4.98</p>
+              <p className="text-xs text-gray-500">Rating</p>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mb-4 text-sm">
-          <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-primary dark:text-primary-bright">
-            ●
-          </motion.span>
-          <span>On the way to your location...</span>
-        </div>
-
-        <div className="bg-surface dark:bg-surface-dark rounded-xl p-4 mb-4">
-          <p className="text-gray-400 text-xs mb-1">ETA</p>
-          <p className="text-3xl font-bold text-primary dark:text-primary-bright">
-            {eta}:{seconds.toString().padStart(2, '0')}
-          </p>
-        </div>
-
-        <div>
-          <div className="flex justify-between mb-2">
-            <span className="text-xs text-gray-400">Distance</span>
-            <span className="text-xs text-gray-400">3.2 km</span>
+      {/* ETA Hero Display */}
+      <div className="px-4 mt-6">
+        <div className="bg-gradient-to-br from-[#005F54] to-[#00B4D8] rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+          
+          <div className="relative z-10 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white/80">Estimated Arrival</p>
+              <div className="flex items-end gap-1">
+                <span className="text-5xl font-bold tracking-tight">{eta}</span>
+                <span className="text-xl font-medium text-white/80 mb-1">min</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-xs text-white/80">Provider is on the way</span>
+              </div>
+            </div>
+            <div className="relative w-20 h-20">
+              <svg className="w-20 h-20 transform -rotate-90">
+                <circle cx="40" cy="40" r="32" stroke="white/20" strokeWidth="4" fill="none" />
+                <circle 
+                  cx="40" cy="40" r="32" 
+                  stroke="white" 
+                  strokeWidth="4" 
+                  fill="none" 
+                  strokeDasharray={`${(8 - eta / 10) * 20.1} 201`}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Clock size={24} className="text-white/80" />
+              </div>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-surface-light rounded-full h-2">
-            <motion.div
-              className="bg-gradient-to-r from-primary to-info h-2 rounded-full"
-              initial={{ width: '20%' }}
-              animate={{ width: '60%' }}
-              transition={{ duration: 3, repeat: Infinity, repeatType: 'mirror' }}
+
+          {/* Progress bar */}
+          <div className="relative z-10 mt-4 h-1.5 bg-white/20 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-white rounded-full transition-all duration-1000"
+              style={{ width: `${(8 - eta) / 8 * 100}%` }}
             />
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Action Buttons */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="mx-4 mb-4 grid grid-cols-2 gap-3"
-      >
-        <button className="flex items-center justify-center gap-2 border-2 border-gray-200 dark:border-surface-light hover:border-primary dark:hover:border-primary-bright text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-bright font-semibold py-3 rounded-xl transition-all text-sm">
-          <Phone size={18} />
-          Call Driver
-        </button>
-        <button className="flex items-center justify-center gap-2 border-2 border-gray-200 dark:border-surface-light hover:border-primary dark:hover:border-primary-bright text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-bright font-semibold py-3 rounded-xl transition-all text-sm">
-          <Share2 size={18} />
-          Share Location
-        </button>
-      </motion.div>
+      {/* Timeline */}
+      <div className="px-4 mt-6">
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100/50">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Order Progress</h3>
+          <div className="relative flex justify-between">
+            {/* Line behind */}
+            <div className="absolute left-0 right-0 top-5 h-1 bg-gray-100">
+              <div 
+                className="h-full bg-gradient-to-r from-[#005F54] to-[#00B4D8] transition-all duration-1000 rounded-full"
+                style={{ 
+                  width: orderStatus === 'confirmed' ? '25%' : 
+                         orderStatus === 'assigned' ? '50%' : 
+                         orderStatus === 'onway' ? '75%' : '100%' 
+                }}
+              />
+            </div>
 
-      {/* Chat Preview */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.45 }}
-        className="mx-4 mb-4 bg-white dark:bg-surface-card rounded-xl p-4 cursor-pointer hover:shadow-md transition-all shadow-sm"
-        onClick={() => setShowChatPreview(true)}
-      >
-        <div className="flex gap-3 mb-2">
-          <MessageCircle size={18} className="text-primary dark:text-primary-bright flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-gray-600 dark:text-gray-400 text-sm truncate">"I'm on my way..."</p>
-            <p className="text-gray-400 text-xs">Ahmed</p>
+            {['confirmed', 'assigned', 'onway', 'completed'].map((step, idx) => {
+              const isActive = orderStatus === step;
+              const isCompleted = ['confirmed', 'assigned', 'onway', 'completed'].indexOf(step) <= 
+                                  ['confirmed', 'assigned', 'onway', 'completed'].indexOf(orderStatus);
+              
+              return (
+                <div key={step} className="flex flex-col items-center z-10">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                    isCompleted ? 'bg-[#005F54] text-white shadow-lg shadow-[#005F54]/30' : 'bg-gray-100 text-gray-400'
+                  } ${isActive ? 'ring-4 ring-[#005F54]/20 scale-110' : ''}`}>
+                    {isCompleted ? <CheckCircle size={18} /> : idx + 1}
+                  </div>
+                  <span className="text-[10px] font-medium text-gray-500 mt-2 text-center leading-tight">
+                    {step === 'confirmed' ? 'Confirm' : 
+                     step === 'assigned' ? 'Assign' : 
+                     step === 'onway' ? 'On Way' : 'Complete'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <button className="text-primary dark:text-primary-bright hover:underline text-sm font-semibold transition-all">
-          Open Chat
-        </button>
-      </motion.div>
+      </div>
 
-      {/* Complete / Cancel */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="px-4 pb-8 flex items-center justify-center gap-6"
-      >
-        <button
-          onClick={() => setIsCompleting(true)}
-          className="text-primary dark:text-primary-bright hover:underline font-semibold text-sm transition-all"
-        >
-          Mark as Complete
-        </button>
-        <button
-          onClick={() => navigate('/customer-home')}
-          className="text-danger hover:underline font-semibold text-sm transition-all"
-        >
-          Cancel Order
-        </button>
-      </motion.div>
+      {/* Action Buttons */}
+      <div className="px-4 mt-6">
+        <div className="grid grid-cols-3 gap-3">
+          <button className="bg-gradient-to-r from-[#005F54] to-[#00B4D8] text-white py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-[#005F54]/30 hover:shadow-xl transition-all active:scale-95">
+            <Phone size={18} /> Call
+          </button>
+          <button className="bg-white text-[#005F54] py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2 border border-[#005F54]/20 hover:bg-[#005F54]/5 transition-all active:scale-95">
+            <MessageCircle size={18} /> Chat
+          </button>
+          <button className="bg-white text-gray-700 py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 transition-all active:scale-95">
+            <Navigation size={18} /> Track
+          </button>
+        </div>
+      </div>
 
-      {/* Completion Overlay */}
-      <AnimatePresence>
-        {isCompleting && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end"
-          >
-            <motion.div
-              initial={{ y: 500 }}
-              animate={{ y: 0 }}
-              exit={{ y: 500 }}
-              transition={{ type: 'spring', damping: 30 }}
-              className="w-full max-w-md bg-white dark:bg-surface-card rounded-t-3xl p-6 pb-8"
+      {/* Footer Actions */}
+      <div className="px-4 mt-6 pb-24">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleCopyOrderId}
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-navy dark:text-white">Rate & Review</h3>
-                <button onClick={() => { setIsCompleting(false); setRating(0); setSelectedTip(0); setReview(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-surface-light rounded-lg transition-all">
-                  <X size={20} className="text-gray-400" />
-                </button>
-              </div>
+              {showCopied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+              <span>{showCopied ? 'Copied!' : 'Copy ID'}</span>
+            </button>
+            <button 
+              onClick={() => setShowHelp(true)}
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition"
+            >
+              <HelpCircle size={16} /> Help
+            </button>
+            <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition">
+              <Share2 size={16} /> Share
+            </button>
+          </div>
+          {orderStatus !== 'completed' && (
+            <button 
+              onClick={handleCancelOrder}
+              className="text-sm font-semibold text-red-500 hover:text-red-600 transition flex items-center gap-1.5"
+            >
+              <X size={16} /> Cancel
+            </button>
+          )}
+        </div>
+      </div>
 
-              <div className="mb-6">
-                <p className="text-gray-500 dark:text-gray-400 mb-3 text-sm">Rate your experience</p>
-                <div className="flex gap-3 justify-center">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <motion.button key={star} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.95 }} onClick={() => setRating(star)} className="text-4xl transition-all">
-                      <Star size={32} className={star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300 dark:text-gray-600'} />
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <p className="text-gray-500 dark:text-gray-400 mb-3 text-sm">Add a tip</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {[10, 15, 20].map((tip) => (
-                    <motion.button
-                      key={tip}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => setSelectedTip(tip)}
-                      className={`py-3 rounded-xl font-semibold transition-all text-sm ${
-                        selectedTip === tip
-                          ? 'bg-gradient-to-br from-primary to-info text-white shadow-md'
-                          : 'bg-gray-50 dark:bg-surface-light text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-surface-card'
-                      }`}
-                    >
-                      +{tip}%
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
-              <textarea
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
-                placeholder="Share your experience (optional)"
-                className="w-full bg-gray-50 dark:bg-surface-light text-navy dark:text-white rounded-xl px-4 py-3 border border-gray-200 dark:border-surface-light placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 mb-6 resize-none h-24"
-              />
-
-              <button
-                onClick={handleCompleteOrder}
-                disabled={rating === 0}
-                className={`w-full py-4 rounded-xl font-bold transition-all active:scale-[0.98] ${
-                  rating > 0
-                    ? 'bg-gradient-to-r from-primary to-info hover:from-primary-dark hover:to-info text-white'
-                    : 'bg-gray-200 dark:bg-surface-light text-gray-400 cursor-not-allowed'
-                }`}
+      {/* Completed State Overlay */}
+      {orderStatus === 'completed' && (
+        <div className="fixed inset-0 bg-gradient-to-br from-green-500/95 to-emerald-600/95 z-50 flex items-center justify-center p-6 animate-[fadeIn_0.5s_ease-out]">
+          <div className="text-center text-white max-w-sm">
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-[bounceIn_0.6s_ease-out]">
+              <CheckCircle size={48} className="text-green-500" />
+            </div>
+            <h2 className="text-3xl font-bold mb-2">Service Complete! 🎉</h2>
+            <p className="text-white/80 mb-6">Thank you for choosing KHIDMAT</p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => navigate('/customer-orders')}
+                className="bg-white text-green-600 px-8 py-3.5 rounded-2xl font-bold shadow-lg hover:shadow-xl transition active:scale-95"
               >
-                Complete Order
+                View Order History
               </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <button 
+                onClick={() => navigate('/customer-home')}
+                className="text-white/80 hover:text-white transition font-medium"
+              >
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Chat Preview Overlay */}
-      <AnimatePresence>
-        {showChatPreview && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end"
-          >
-            <motion.div
-              initial={{ y: 500 }}
-              animate={{ y: 0 }}
-              exit={{ y: 500 }}
-              transition={{ type: 'spring', damping: 30 }}
-              className="w-full max-w-md bg-white dark:bg-surface-card rounded-t-3xl p-6 pb-8 h-[70vh] flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-100 dark:border-surface-light">
-                <h3 className="text-lg font-bold text-navy dark:text-white">Chat with Ahmed</h3>
-                <button onClick={() => setShowChatPreview(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-surface-light rounded-lg transition-all">
-                  <X size={20} className="text-gray-400" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-info rounded-full flex-shrink-0" />
-                  <div className="bg-gray-50 dark:bg-surface-light rounded-xl px-4 py-2 max-w-xs">
-                    <p className="text-gray-700 dark:text-gray-300 text-sm">I'm on my way to your location...</p>
-                    <p className="text-gray-400 text-xs mt-1">8:42 AM</p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <div className="bg-gradient-to-br from-primary to-info rounded-xl px-4 py-2 max-w-xs">
-                    <p className="text-white text-sm">Thanks! See you soon</p>
-                    <p className="text-white/70 text-xs mt-1">8:41 AM</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-info rounded-full flex-shrink-0" />
-                  <div className="bg-gray-50 dark:bg-surface-light rounded-xl px-4 py-2 max-w-xs">
-                    <p className="text-gray-700 dark:text-gray-300 text-sm">Just 5 minutes away!</p>
-                    <p className="text-gray-400 text-xs mt-1">8:39 AM</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  className="flex-1 bg-gray-50 dark:bg-surface-light text-navy dark:text-white rounded-xl px-4 py-3 border border-gray-200 dark:border-surface-light placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-                <button className="p-3 bg-gradient-to-br from-primary to-info text-white rounded-xl transition-all hover:shadow-md">
-                  <Send size={20} />
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes bounceIn {
+          0% { transform: scale(0); opacity: 0; }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+    </div>
   );
 };
 
