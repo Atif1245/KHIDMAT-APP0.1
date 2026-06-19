@@ -1,24 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Phone, MessageCircle, Navigation, 
   Clock, CheckCircle, Star, Copy, Check, X,
-  MapPin, User, Calendar, ChevronRight
+  MapPin
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 
-// ✅ Leaflet imports
+// ✅ Leaflet imports - SAFE MODE
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// ✅ Fix default marker icons
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+// ✅ Fix marker icons - SAFE
+try {
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  });
+} catch (e) {
+  console.log('Leaflet icon fix skipped');
+}
 
 // ✅ Custom car icon
 const carIcon = L.divIcon({
@@ -30,7 +34,7 @@ const carIcon = L.divIcon({
   iconAnchor: [16, 16],
 });
 
-// ✅ Simple circle marker for customer
+// ✅ Customer icon
 const customerIcon = L.divIcon({
   html: `<div style="background: #EF4444; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 20px rgba(239,68,68,0.4);"></div>`,
   className: '',
@@ -40,18 +44,14 @@ const customerIcon = L.divIcon({
 
 const LiveTracking: React.FC = () => {
   const navigate = useNavigate();
-  const { profile } = useApp();
   const [eta, setEta] = useState(8);
   const [orderStatus, setOrderStatus] = useState<'confirmed' | 'assigned' | 'onway' | 'completed'>('onway');
   const [showCopied, setShowCopied] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState(false);
   
-  // ✅ Provider location (moving)
-  const [providerLocation, setProviderLocation] = useState<[number, number]>([31.5204, 74.3587]);
-  const [customerLocation] = useState<[number, number]>([31.5154, 74.3517]);
-  
-  // ✅ Map ref
-  const mapRef = useRef<any>(null);
+  // ✅ Locations
+  const providerLocation: [number, number] = [31.5204, 74.3587];
+  const customerLocation: [number, number] = [31.5154, 74.3517];
 
   // ETA countdown
   useEffect(() => {
@@ -68,32 +68,6 @@ const LiveTracking: React.FC = () => {
       return () => clearInterval(timer);
     }
   }, [orderStatus, eta]);
-
-  // ✅ Simulate provider movement
-  useEffect(() => {
-    if (orderStatus === 'onway') {
-      const timer = setInterval(() => {
-        setProviderLocation(prev => {
-          // Move towards customer (simplified)
-          const lat = prev[0] + 0.0005;
-          const lng = prev[1] + 0.0004;
-          // Check if reached customer
-          if (lat >= customerLocation[0] && lng >= customerLocation[1]) {
-            return customerLocation;
-          }
-          return [lat, lng];
-        });
-      }, 3000);
-      return () => clearInterval(timer);
-    }
-  }, [orderStatus, customerLocation]);
-
-  // ✅ Center map when location changes
-  useEffect(() => {
-    if (mapRef.current && providerLocation) {
-      mapRef.current.setView(providerLocation, 15);
-    }
-  }, [providerLocation]);
 
   const handleCopyOrderId = () => {
     navigator.clipboard.writeText('KH-12345');
@@ -123,7 +97,7 @@ const LiveTracking: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-24">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-gray-100 px-4 py-3">
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3">
         <div className="flex items-center gap-3 max-w-md mx-auto">
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-xl">
             <ArrowLeft size={22} className="text-gray-700" />
@@ -148,32 +122,37 @@ const LiveTracking: React.FC = () => {
         </div>
       </div>
 
-      {/* ✅ LIVE MAP */}
+      {/* ✅ LIVE MAP - With error handling */}
       <div className="mx-4 mt-4 rounded-2xl overflow-hidden shadow-lg" style={{ height: '240px' }}>
-        <MapContainer
-          center={providerLocation}
-          zoom={15}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl={false}
-          ref={mapRef}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; OpenStreetMap'
-          />
-          
-          {/* ✅ Customer Marker */}
-          <Marker position={customerLocation} icon={customerIcon}>
-            <Popup>Your Location</Popup>
-          </Marker>
-          
-          {/* ✅ Provider Marker (moving) */}
-          <Marker position={providerLocation} icon={carIcon}>
-            <Popup>Provider is on the way!</Popup>
-          </Marker>
-        </MapContainer>
+        {!mapError ? (
+          <MapContainer
+            center={providerLocation}
+            zoom={15}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={false}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; OpenStreetMap'
+            />
+            <Marker position={customerLocation} icon={customerIcon}>
+              <Popup>Your Location</Popup>
+            </Marker>
+            <Marker position={providerLocation} icon={carIcon}>
+              <Popup>Provider is on the way!</Popup>
+            </Marker>
+          </MapContainer>
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-emerald-700 to-emerald-500 flex items-center justify-center text-white">
+            <div className="text-center">
+              <MapPin size={40} className="mx-auto mb-2" />
+              <p className="text-sm font-medium">Live Location</p>
+              <p className="text-xs text-white/70">Provider is on the way</p>
+            </div>
+          </div>
+        )}
         
-        {/* ✅ Map overlay - distance badge */}
+        {/* Map overlay */}
         <div className="absolute bottom-3 left-3 z-20 bg-white/90 backdrop-blur-md rounded-xl px-3 py-1.5 shadow-lg border border-white/50">
           <div className="flex items-center gap-1.5">
             <Navigation size={14} className="text-emerald-600" />
@@ -184,10 +163,7 @@ const LiveTracking: React.FC = () => {
 
       {/* ETA Card */}
       <div className="mx-4 mt-4">
-        <div className="bg-gradient-to-br from-emerald-700 to-emerald-500 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-          
+        <div className="bg-gradient-to-br from-emerald-700 to-emerald-500 rounded-2xl p-5 text-white shadow-lg">
           <div className="relative z-10 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-white/80">Estimated Arrival</p>
